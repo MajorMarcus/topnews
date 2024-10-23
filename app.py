@@ -32,6 +32,7 @@ def extract_text_with_spacing(html_content):
 
 def extract_actual_url(url):
     start = url.find(IMAGE_KEY)
+
     if start == -1 or any(sub in url for sub in ['betting', 'squawka', 'bit.ly', 'footballtoday.com']):
         return None
     return urllib.parse.unquote(url[start + len(IMAGE_KEY):]).replace('width=720', '')
@@ -68,11 +69,9 @@ async def fetch_article(session, link, source):
         if source == '90min':
             paras = soup.find_all('p', class_='tagStyle_z4kqwb-o_O-style_1tcxgp3-o_O-style_1pinbx1-o_O-style_48hmcm')
             paras_text = ' '.join(p.text for p in paras)
-            print(paras_text)
-            print('sf')
-            img = soup.find('img', class_='base_1emrqjj')['src'] or ''
+            img = soup.find('img', class_='base_1emrqjj')['src'] if soup.find('img', class_='base_1emrqjj') else ''
             time = time_ago(soup.find('time')['datetime'])
-            title = soup.find('h1', class_='tagStyle_mxz06e-o_O-title_dhip6x-o_O-sidesPadding_1kaga1a').text
+            title = soup.find('h1', class_='tagStyle_mxz06e-o_O-title_dhip6x-o_O-sidesPadding_1kaga1a').text if soup.find('h1', class_='tagStyle_mxz06e-o_O-title_dhip6x-o_O-sidesPadding_1kaga1a') else ''
             return {
 
                 'article_content': paras_text,
@@ -81,32 +80,35 @@ async def fetch_article(session, link, source):
                 'title': title,
                 'publisher': '90min',
                 'article_url': link,
-                'article_id': random.randint(100000, 999999)
+                'article_id': random.randint(100000, 999999),
+                'attribution':''
             }
 
         elif source == 'OneFootball':
-            article_id = link[-8:] 
-            print(source) # Extract the last 8 characters as article_id
+            article_id = link[-8:]  # Extract the last 8 characters as article_id
             img_element = soup.find('img', class_='ImageWithSets_of-image__img__pezo7 ImageWrapper_media-container__image__Rd2_F')
             img_url = img_element['src'] if img_element else ''
             img_url = extract_actual_url(img_url)
-            title = soup.find('span', class_="ArticleHeroBanner_articleTitleTextBackground__yGcZl").text.strip()
-            time = soup.find('p', class_='title-8-regular ArticleHeroBanner_providerDetails__D_5AV').find_all('span')[1].text.strip()
-            publisher = soup.find('p', class_='title-8-bold').text.strip()
-            textlist = extract_text_with_spacing(str(soup.find_all('div', class_='ArticleParagraph_articleParagraph__MrxYL')))
-            text_elements = textlist[0]
-            attribution = textlist[1]
+            if img_url:
+                title = soup.find('span', class_="ArticleHeroBanner_articleTitleTextBackground__yGcZl").text.strip() if soup.find('span', class_="ArticleHeroBanner_articleTitleTextBackground__yGcZl") else ''
+                time = soup.find('p', class_='title-8-regular ArticleHeroBanner_providerDetails__D_5AV').find_all('span')[1].text.strip() if soup.find('p', class_='title-8-regular ArticleHeroBanner_providerDetails__D_5AV') else ''
+                publisher = soup.find('p', class_='title-8-bold').text.strip() if soup.find('p', class_='title-8-bold') else ''
+                textlist = extract_text_with_spacing(str(soup.find_all('div', class_='ArticleParagraph_articleParagraph__MrxYL')))
+                text_elements = textlist[0]
+                attribution = textlist[1]
 
-            return {
-                'title': title,
-                'article_content': unidecode(text_elements),
-                'img_url': img_url,
-                'article_url': link,
-                'article_id': article_id,
-                'time': time,
-                'publisher': publisher,
-                'attribution': attribution
-            }
+                return {
+                    'title': title,
+                    'article_content': unidecode(text_elements),
+                    'img_url': img_url,
+                    'article_url': link,
+                    'article_id': article_id,
+                    'time': time,
+                    'publisher': publisher,
+                    'attribution': ''
+                }
+            else:
+                return None
 
 async def fetch_articles():
     async with aiohttp.ClientSession(trust_env=True) as session:
@@ -119,7 +121,6 @@ async def fetch_articles():
 
         # Fetch OneFootball articles
         async with session.get('https://www.onefootball.com/en/home') as response:
-            print('assa')
             html = await response.text()
             links_onefootball = [a['href'] for a in BeautifulSoup(html, 'html.parser').find_all('a') if '/news/' in a['href']]
 
@@ -128,7 +129,8 @@ async def fetch_articles():
                 [fetch_article(session, f'https://onefootball.com/{link}', 'OneFootball') for link in links_onefootball]
         articles = await asyncio.gather(*tasks)
 
-        # Shuffle articles
+        # Filter out None values and shuffle articles
+        articles = [article for article in articles if article is not None]
         random.shuffle(articles)
 
         return articles
