@@ -109,7 +109,6 @@ async def fetch_article(session, link, source):
                 }
             else:
                 return None
-
 async def fetch_articles():
     async with aiohttp.ClientSession(trust_env=True) as session:
         # Fetch 90min articles
@@ -129,8 +128,17 @@ async def fetch_articles():
                 [fetch_article(session, f'https://onefootball.com/{link}', 'OneFootball') for link in links_onefootball]
         articles = await asyncio.gather(*tasks)
 
-        # Filter out None values and shuffle articles
+        # Filter out None values
         articles = [article for article in articles if article is not None]
+
+        # Make sure articles are unique by their titles
+        unique_articles = {}
+        for article in articles:
+            if article['title'] not in unique_articles:
+                unique_articles[article['title']] = article
+
+        # Convert the dictionary back to a list and shuffle the articles
+        articles = list(unique_articles.values())
         random.shuffle(articles)
 
         return articles
