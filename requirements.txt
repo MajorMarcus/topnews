@@ -1,0 +1,7 @@
+flask[async]
+gunicorn
+bs4
+requests
+unidecode
+aiohttp
+regex
