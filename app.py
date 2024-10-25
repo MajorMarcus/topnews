@@ -70,6 +70,7 @@ async def fetch_article(session, link, source):
             paras = soup.find_all('p', class_='tagStyle_z4kqwb-o_O-style_1tcxgp3-o_O-style_1pinbx1-o_O-style_48hmcm')
             paras_text = ' '.join(p.text for p in paras)
             img = soup.find('img', class_='base_1emrqjj')['src'] if soup.find('img', class_='base_1emrqjj') else ''
+            img = img.replace('w_720,', '')
             time = time_ago(soup.find('time')['datetime'])
             title = soup.find('h1', class_='tagStyle_mxz06e-o_O-title_dhip6x-o_O-sidesPadding_1kaga1a').text if soup.find('h1', class_='tagStyle_mxz06e-o_O-title_dhip6x-o_O-sidesPadding_1kaga1a') else ''
             return {
