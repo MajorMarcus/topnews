@@ -1,5 +1,5 @@
 import random
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from bs4 import BeautifulSoup
 import aiohttp
 import asyncio
@@ -109,10 +109,9 @@ async def fetch_article(session, link, source):
                 }
             else:
                 return None
-async def fetch_articles():
+async def fetch_articles(page):
     async with aiohttp.ClientSession(trust_env=True) as session:
         # Fetch 90min articles
-        page = random.randint(1, 5)  # Randomize the page number
         async with session.get(f'https://www.90min.com/categories/football-news?page={page}') as response:
             html = await response.text()
             soup = BeautifulSoup(html, 'html.parser')
@@ -139,13 +138,14 @@ async def fetch_articles():
 
         # Convert the dictionary back to a list and shuffle the articles
         articles = list(unique_articles.values())
+      
         random.shuffle(articles)
-
         return articles
 
 @app.route('/topnews', methods=['GET'])
 async def get_top_news():
-    articles = await fetch_articles()
+    page = request.args.get('page')
+    articles = await fetch_articles(page)
     return jsonify({'news_items': articles})
 
 if __name__ == "__main__":
