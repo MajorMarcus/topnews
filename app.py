@@ -177,7 +177,7 @@ def time_ago(iso_timestamp):
         return f"{int(seconds // year)} years ago"
 
 def contains_word_from_list(text):
-    words_in_text = set(PATTERN_WORD.findall(text.lower()))
+    words_in_text = set(PATTERN.findall(text.lower()))
     return bool(words_in_text & WOMENS_WORDS)
 
 async def fetch_article(session, link, source, womens):
@@ -187,7 +187,7 @@ async def fetch_article(session, link, source, womens):
         soup = BeautifulSoup(html, 'html.parser')
         text_elements, attribution = extract_text_with_spacing(str(soup))
         
-        if not text_elements or (womens is False and (contains_word_from_list(text_elements) or contains_word_from_list(img_url))):
+        if not text_elements or (womens is False and (contains_word_from_list(text_elements))):
             return None
         elif source == '90min':
             paras = soup.find_all('p', class_='tagStyle_z4kqwb-o_O-style_1tcxgp3-o_O-style_1pinbx1-o_O-style_48hmcm')
@@ -206,33 +206,11 @@ async def fetch_article(session, link, source, womens):
                 'article_url': link,
                 'article_id': random.randint(100000, 999999),
                 'attribution':''
-            }
-
-        elif source == 'OneFootball':
-            article_id = link[-8:]  # Extract the last 8 characters as article_id
-            img_element = soup.find('img', class_='ImageWithSets_of-image__img__pezo7 ImageWrapper_media-container__image__Rd2_F')
-            img_url = img_element['src'] if img_element else ''
-            img_url = extract_actual_url(img_url)
-            if img_url:
-                title = soup.find('span', class_="ArticleHeroBanner_articleTitleTextBackground__yGcZl").text.strip() if soup.find('span', class_="ArticleHeroBanner_articleTitleTextBackground__yGcZl") else ''
-                time = soup.find('p', class_='title-8-regular ArticleHeroBanner_providerDetails__D_5AV').find_all('span')[1].text.strip() if soup.find('p', class_='title-8-regular ArticleHeroBanner_providerDetails__D_5AV') else ''
-                publisher = soup.find('p', class_='title-8-bold').text.strip() if soup.find('p', class_='title-8-bold') else ''
-                textlist = extract_text_with_spacing(str(soup.find_all('div', class_='ArticleParagraph_articleParagraph__MrxYL')))
-                text_elements = textlist[0]
-                attribution = textlist[1]
-
-                return {
-                    'title': title,
-                    'article_content': unidecode(text_elements),
-                    'img_url': img_url,
-                    'article_url': link,
-                    'article_id': article_id,
-                    'time': time,
-                    'publisher': publisher,
-                    'attribution': ''
+            
                 }
-            else:
-                return None
+        
+
+            
 async def fetch_articles(page, womens):
     async with aiohttp.ClientSession(trust_env=True) as session:
         # Fetch 90min articles
@@ -242,47 +220,40 @@ async def fetch_articles(page, womens):
             links_90min = [a.find('a')['href'] for a in soup.find_all('article', class_='style_1wqwdi9-o_O-wrapper_1wgo221') if 'prediction' not in a.find('a')['href']]
 
         # Fetch OneFootball articles
-        async with session.get('https://www.onefootball.com/en/home') as response:
-            html = await response.text()
-            links_onefootball = [a['href'] for a in BeautifulSoup(html, 'html.parser').find_all('a') if '/news/' in a['href']]
-        links_onefootball = set(links_onefootball)
-        links_onefootball = list(links_onefootball)
+
         # Fetch content concurrently
-        tasks = [fetch_article(session, link, '90min', womens=womens) for link in links_90min] + \
-                [fetch_article(session, f'https://onefootball.com/{link}', 'OneFootball', womens=womens) for link in links_onefootball]
+        tasks = [fetch_article(session, link, '90min', womens=womens) for link in links_90min[:15]]
         articles = await asyncio.gather(*tasks)
-        articles = articles[:10]
-        # Filter out None values
+
+        # Filter out None values and limit to 10 article
         articles = [article for article in articles if article is not None]
+
+        # Rephrase titles and contents
         rephrased_titles = await batch_rephrase_titles([article['title'] for article in articles])
         rephrased_contents = await batch_rephrase_content([article['article_content'] for article in articles])
 
-
-        # Make sure articles are unique by their titles
+        # Ensure articles are unique by their titles
         unique_articles = {}
         for article in articles:
             if article['title'] not in unique_articles:
                 unique_articles[article['title']] = article
 
-        
-
-        # Convert the dictionary back to a list and shuffle the articles
+        # Convert the dictionary back to a list
         articles = list(unique_articles.values())
 
         for i, article in enumerate(articles):
             article['title'] = rephrased_titles[i]
             article['article_content'] = rephrased_contents[i]
 
-        articles.extend(articles)
-
         return articles
-
 @app.route('/topnews', methods=['GET'])
 async def get_top_news():
-    page = request.args.get('page')
-    womens = request.args.get('womens')
+    page = request.args.get('page', default=1, type=int)
+    womens = request.args.get('womens', default=False, type=bool)
     articles = await fetch_articles(page, womens=womens)
+    # Ensure only 10 articles are returned
     return jsonify({'news_items': articles})
 
+
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=True, use_reloader=False) 
