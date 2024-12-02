@@ -2,6 +2,8 @@ flask[async]
 gunicorn
 bs4
 requests
+httpx
+groq
 unidecode
 aiohttp
 regex
